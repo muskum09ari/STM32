@@ -56,8 +56,8 @@ Lane A: Starts with GREEN (stateA = 0, timerA = 5)
 
 Lane B: Starts with RED (stateB = 2, timerB = 7)
 
-5. Ultrasonic Object Detection
-6. ➤ Each 1 second:
+4. Ultrasonic Object Detection:
+ ➤ Each 1 second:
 Trigger ultrasonic sensors (TRIG pin pulse).
 
 Wait for ECHO pin to go HIGH, then LOW.
@@ -83,7 +83,7 @@ Only one time extension per detection using ultrasonic_granted_A/B flags.
 
 Resets after GREEN ends.
 
-6.Traffic Light Management
+5.Traffic Light Management
 state == 0 → GREEN ON
     → after timerA/B expires → state = 1
 
@@ -99,7 +99,7 @@ Corresponding LED pins controlled.
 Time shown on 7-segment TM1637 display for both lanes.
 
 
-7. Keypad Input – scan_keypad()
+6. Keypad Input – scan_keypad()
 Rows are driven LOW one by one.
 
 Columns are checked for LOW to detect key press.
@@ -107,7 +107,7 @@ Columns are checked for LOW to detect key press.
 Implements basic debounce delay (50ms).
 
 
-8.TM1637 Display Handling:
+7.TM1637 Display Handling:
 Displays 4-digit countdown of timerA and timerB each second.
 
 Uses:
@@ -117,7 +117,7 @@ TM1637_start/stop/write_byte
 Segment mappings to digits via digit_to_segment[].
 
 
-9.Supporting Functions:
+8.Supporting Functions:
 delay_us() – Microsecond delay using DWT.
 
 delay_ms() – Millisecond delay using delay_us().
