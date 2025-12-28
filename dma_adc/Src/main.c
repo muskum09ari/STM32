@@ -1,0 +1,173 @@
+/*Main ek analog value (jaise potentiometer ya sensor ka output) read karna chahti hoon,
+ usko ADC ke through convert karke memory mein store karna hai — bina CPU ko disturb kiye
+
+ Agar DMA na ho, toh CPU ko baar-baar check karna padta:
+
+"ADC conversion complete hua?"
+
+"Chalo DR se result uthao"
+
+"Memory mein store karo"
+Yeh baar-baar ka manual kaam CPU ko busy rakhta hai
+
+DMA = Direct Memory Access
+Yeh ek module hota hai jo automatically data ko transfer karta hai between peripheral (like ADC) and memory,
+without CPU intervention
+ADC ne value convert ki — DMA ne turant uthake
+memory mein daal diya
+Jab DMA kaam complete kar leta hai, toh ek interrupt se CPU ko bas bata deta hai:
+ data ready hai!
+
+DMA2 Stream0	ADC1->DR se data uthakar memory mein daalega
+Memory (adc_buffer[])	Yahan pe data stored milega
+Interrupt	Jab data ready ho, flag set kare ya message de
+Kya data chahiye? → Analog signal from PC1
+
+Kaun dega? → ADC1
+
+Kaha store karna hai? → Memory variable (adc_buffer[0])
+
+Kaun store karega? → DMA
+
+CPU kab involve hoga? → Sirf jab DMA bole: "data ready hai"
+
+CPU ka kaam kya hai? → LCD pe value print karna
+
+Peripheral → DMA → Memory → (Interrupt) → LCD or other output
+*/
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stm32f4xx.h>
+#include "lcd.h"
+
+#define ADC_BUF_LEN 1
+uint16_t adc_buffer[ADC_BUF_LEN];  // buffer to store ADC data
+char buf[16];                      // for voltage display
+float Vol;                         // calculated voltage
+volatile int dma_done = 0;         // flag when DMA transfer completes
+
+//ADC channel 11 is mapped to PC1, and for analog input,
+//that pin must be in "Analog Mode (MODER = 11)".
+
+void adc_gpio_init(void)
+{
+    // Enable GPIOC clock
+    RCC->AHB1ENR |= (1<<2);// its PC1
+
+    // Set PC1 to analog mode AS pc1 so pg281
+    GPIOC->MODER |= (1<<2);  // 11: analog
+    GPIOC->MODER |= (1<<3);
+}
+
+void adc1_init(void)
+{
+    // Enable ADC1 clock
+    RCC->APB2ENR |= (1<<8);
+
+    // Disable ADC before configuration
+    ADC1->CR2 &= ~(1<<0);
+
+    // Configure for channel 11 (PC1)
+    ADC1->SQR3 = 11;  // 1st conversion in regular sequence is channel 11
+    ADC1->SQR1 = 0;   // 1 conversion in the sequence
+
+    // Enable scan mode
+    ADC1->CR1 |= (1<<8);
+
+    // Enable DMA mode, DMA continues for every conversion
+    ADC1->CR2 |= ((1<<8) | (1<<9));
+
+    // Enable continuous conversion mode
+    ADC1->CR2 |= (1<<1);
+}
+
+void dma2_init(void)
+{
+    // Enable DMA2 clock
+    RCC->AHB1ENR |= (1<<22);
+
+    // Disable Stream 0 before configuration
+    DMA2_Stream0->CR &= ~(1<<0);
+    while (DMA2_Stream0->CR & (1<<0));  // Wait until disabled
+
+    // Set peripheral address (ADC1->DR)
+    DMA2_Stream0->PAR = (uint32_t)&ADC1->DR;
+
+    // Set memory address
+    DMA2_Stream0->M0AR = (uint32_t)adc_buffer;
+
+    // Number of data items to transfer
+    DMA2_Stream0->NDTR = ADC_BUF_LEN; // // how many data transfers
+
+    // Channel 0
+    DMA2_Stream0->CR &= ~((1<<25)|(1<<26)|(1<<27));
+
+    // Memory increment mode
+    DMA2_Stream0->CR |= (1<<10);
+
+    // Circular mode
+    DMA2_Stream0->CR |= (1<<8); // Circular mode (wrap around and repeat)
+
+    // Peripheral and memory size: half-word (16-bit)
+    DMA2_Stream0->CR |= ((1<<13)|(1<<14));
+    DMA2_Stream0->CR |= ((1<<12)|(1<<11));
+
+    // Transfer complete interrupt enable
+    DMA2_Stream0->CR |= (1<<4);
+
+    // Direct mode (no FIFO)
+    DMA2_Stream0->FCR = 0;
+
+    // Enable interrupt in NVIC
+    NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+    // Enable the stream
+    DMA2_Stream0->CR |= (1<<0);
+}
+
+void adc_start(void)
+{
+    ADC1->CR2 |= (1<<0);     // Enable ADC
+    for (volatile int i = 0; i < 1000; i++);  // Short delay
+    ADC1->CR2 |= (1<<30);  // Start conversion
+}
+
+// DMA2 Stream0 interrupt handler
+void DMA2_Stream0_IRQHandler(void)
+{
+    if (DMA2->LISR & (1<<5)) // Check transfer complete flag
+    {
+        DMA2->LIFCR |= (1<<5);// Clear it
+        dma_done = 1;  // Set user-defined flags
+    }
+}
+
+int main(void)
+{
+    lcd_gpio_init();
+    lcd_init();
+    adc_gpio_init();
+    adc1_init();
+    dma2_init();
+    adc_start();
+
+    lcd(0x80, 0);
+    lcd_string("ADC + DMA PC1");
+
+    while (1)
+    {
+        if (dma_done)
+        {
+            dma_done = 0;
+
+            lcd(0xC0, 0);
+            single_print(adc_buffer[0]);
+
+            Vol = (float)(adc_buffer[0]) * 3.0f / 4095.0f;
+            sprintf(buf, "Vol:%.3f", Vol);
+            lcd(0x94, 0);
+            lcd_string(buf);
+        }
+    }
+}

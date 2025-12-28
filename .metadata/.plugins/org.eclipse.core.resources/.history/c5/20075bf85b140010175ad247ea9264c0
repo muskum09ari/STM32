@@ -1,0 +1,10 @@
+/**
+When switch 4 is pressed read ADC value from the POT, generate a duty cycle and using PWM show the PWM output change using
+a buzzer based alarm,
+ */
+
+#include <stdint.h>
+#include<stdio.h>
+#include <STM32f405xx.h>
+#include <lcd.h>
+

@@ -1,0 +1,119 @@
+//SPI1-SPI3 LCD code
+//PA5,6,7, pc10,11,12 Connect wires also 51,52.53 with 20,22,22 pg 56 datasheet pg56
+// check page 56 for PC10,PC11,PC12 FOR PAGE 56 we can get the pins like 51,52,53
+
+#include <stdint.h>
+#include <stdio.h>
+#include "stm32f405xx.h"
+#include "lcd.h"
+
+uint32_t result;
+
+void spi_gpio_init(void);
+void spi_master_config(void);
+void spi_slave_config(void);
+
+int main(void)
+{
+
+
+    // SPI Init
+    spi_gpio_init();
+    spi_master_config();
+    spi_slave_config(); // Configure slave BEFORE master
+
+    // LCD Init
+    lcd_gpio_init();
+    lcd_init();
+
+    lcd_string("LCD Working");           // Startup check
+    for (volatile int i = 0; i < 100000; i++); // Short delay
+    lcd(0x80, 0);                        // Clear display
+    lcd_string("SPI3 Result:");
+
+    while (1)
+    {
+
+        SPI1->DR = 0x23;           // Master sends a byte
+
+        while (!(SPI1->SR & (1 << 1)));  // Wait until TXE bit 1
+        if(SPI3->SR & (1 << 0))  // Wait until RXNE
+        {
+			result = SPI3->DR;         // Read received data
+			// Display result
+			lcd(0xC0, 0);              // Line 2
+			single_print(result);
+        }
+    }
+}
+
+void spi_gpio_init()
+{
+    // SPI1 (Master): PA5 (SCK), PA6 (MISO), PA7 (MOSI)
+    RCC->AHB1ENR |= (1 << 0); // Enable GPIOA
+
+
+    //MODER5,6,7
+    	GPIOA->MODER |=((1<<15)|(1<<13)|(1<<11)); //sets bits
+    	GPIOA->MODER &=~((1<<14)|(1<<12)|(1<<10));// clear bits
+
+    	//sets bits 10 to 15 bits as high speed for PA5,6,7,
+    		GPIOA->OTYPER &=~((1<<5)|(1<<6)|(1<<7));//set s0
+    		GPIOA->OSPEEDR |=((1<<15)|(1<<13)|(1<<11)); //sets bits
+    		GPIOA->OSPEEDR &=~((1<<14)|(1<<12)|(1<<10));// clear bits
+    		//0101 AF5 PG285 and 273
+    		GPIOA->AFR[0] |=((1<<20)|(1<<22)|(1<<24)|(1<<26)|(1<<28)|(1<<30));
+    		GPIOA->AFR[0] &=~((1<<21)|(1<<23)|(1<<25)|(1<<27)|(1<<29)|(1<<31));
+
+   // SPI3 (Slave): PC10 (SCK), PC11 (MISO), PC12 (MOSI)
+    RCC->AHB1ENR |= (1 << 2); // Enable GPIOC
+
+    //MODER PC10,PC11,PC12
+        	GPIOC->MODER |=((1<<21)|(1<<23)|(1<<25)); //sets bits
+        	GPIOC->MODER &=~((1<<20)|(1<<22)|(1<<24));// clear bits
+
+        	//0101 AF5 PG285  DATASHEET PG64 SPI3 AFR 0110 AF6
+        	    		GPIOC->AFR[1] |=((1<<9)|(1<<10)|(1<<13)|(1<<14)|(1<<18)|(1<<17));
+        	    		GPIOC->AFR[1] &=~((1<<8)|(1<<11)|(1<<12)|(1<<15)|(1<<16)|(1<<19));
+
+    GPIOC->OTYPER  &=~((1<<10) | (1<<11) | (1<<12));         //change by AK         //Output push-pull (reset state)
+    //sets bits 21 TO 25 bits as high speed for PC10,11,12 SETS AS10
+        		GPIOC->OSPEEDR |=((1<<21)|(1<<23)|(1<<25)); //sets bits
+        		GPIOC->OSPEEDR &=~((1<<20)|(1<<22)|(1<<24));// clear bits
+}
+
+void spi_master_config()
+{
+	RCC->APB2ENR |=(1<<12); //SPI Enble PG 266
+		SPI1->CR1 |=(1<<2);
+		SPI1->CR1 |=((1<<0)|(1<<1));
+		//sets f/16
+		SPI1->CR1 |=(1<<3);
+		SPI1->CR1 |=(1<<4);
+		SPI1->CR1 &=~(1<<5);
+		SPI1->CR1 &=~(1<<7);
+
+//NSS ssi and ssm
+		SPI1->CR1 |=(1<<8);
+		SPI1->CR1 |=(1<<9);
+		SPI1->CR1 &=~((1<<10)|(1<<11)|(1<<12)|(1<<13));
+		SPI1->CR1 &=~(1<<15);
+		SPI1->CR1 |=(1<<6);
+}
+
+void spi_slave_config()
+{
+	RCC->APB1ENR |=(1<<15);// enable clock
+	SPI3->CR1 &=~(1<<2);// slave mode
+	SPI3->CR1 |=((1<<0)|(1<<1));
+	SPI3->CR1 &=~(1<<7);//BIT as 0
+	SPI3->CR1 &=~(1<<8);//BIT as 0
+	SPI3->CR1 |=(1<<9);
+	SPI3->CR1 &=~(1<<10);//BIT as 0
+	SPI3->CR1 &=~(1<<11);//BIT as 0
+	SPI3->CR1 &=~(1<<12);//BIT as 0
+	SPI3->CR1 &=~(1<<13);//BIT as 0
+	SPI3->CR1 &=~(1<<15);//BIT as 0
+
+	SPI3->CR1 |=(1<<6);
+}

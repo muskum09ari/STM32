@@ -1,0 +1,11 @@
+/**
+ Design a traffic light based system. The first LED should represent RED light, second LED should represent YELLOW light and third LED should represent GREEN light. Control each one of them via buttons using external EXTI interrupts.
+Also, read ADC value from the POT, generate a duty cycle and using PWM show the PWM output change using a buzzer based alarm, if switch 4 is pressed a definite number of times. Further, display the message on the LCD "Buzzer activated" using SPI once the buzzer alarm activates after switch-4 pressing.
+
+ */
+
+#include <stdint.h>
+#include<stdio.h>
+#include <STM32f405xx.h>
+#include <lcd.h>
+

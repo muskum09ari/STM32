@@ -1,0 +1,86 @@
+/*ADC and EXTI interrupts together in 1 program*/
+
+#include <stdint.h>
+#include <stm32f405xx.h>
+#include <stdio.h>
+#include "lcd.h"
+
+
+void adc_init(void);
+void exti7(void);
+uint8_t var;
+float voltage;
+char buffer[20];
+
+int main(void)
+{
+
+	lcd_gpio_init();
+	lcd_init();
+	adc_init();    //calling adc and exti init functions
+	exti7();
+	while(1)
+	{
+		lcd(0x80,0);   //print adc-value on lcd
+		lcd_string("ADC-Value:");
+		single_print(var);
+	    voltage=(float)((var*3.3)/4095); //calculate the voltage
+		sprintf(buffer,"Voltage:%.3f",voltage);
+		lcd(0xC0,0);
+		lcd_string(buffer);  //print adc-voltage on adc
+	}
+
+}
+void exti7()
+{
+	RCC->AHB1ENR|=(1<<1);  //clock enable for port-b
+	GPIOB->MODER&=~(3<<14); //enable gpio for first switch
+	RCC->APB2ENR|=(1<<14); //clock enable for syscfg
+	SYSCFG->EXTICR[1]|=(1<<12);
+	SYSCFG->EXTICR[1]&=~(1<<13);
+	SYSCFG->EXTICR[1]&=~(1<<14);
+	SYSCFG->EXTICR[1]&=~(1<<15);
+
+	EXTI->IMR|=(1<<7);
+	EXTI->RTSR|=(1<<7);
+	NVIC_EnableIRQ(EXTI9_5_IRQn);
+}
+void adc_init()
+{
+	RCC->AHB1ENR|=(1<<2);    //clock enable for pc-1 adc
+	RCC->APB2ENR|=(1<<8);    //clock enable for adc-1
+	GPIOC->MODER|=(1<<2);    //gpio moder enable for pc-1 analog mode
+	GPIOC->MODER|=(1<<3);
+	ADC1->CR2=0;             //initialize cr2 to 0 initially
+	ADC1->SQR1&=~(1<<20);    //since only 1 channel no. 11 is used so only 1 conversion is needed
+	ADC1->SQR1&=~(1<<21);    //Hence, put 0000 in sqr1 23,22,21,20 bit numbers
+	ADC1->SQR1&=~(1<<22);
+	ADC1->SQR1&=~(1<<23);
+
+	ADC1->SQR3=11;           //put 11 in sqr3 register since only 1 channel no. 11 is used
+
+	ADC1->CR1|=(1<<8);       //scan mode is enabled for ADC
+
+	ADC1->CR1=11;            //This is for analog watchdog channel selection bits.
+	ADC1->CR2|=(1<<0);       //Enable ADC by making the ADON bit no. 0 as 1
+	ADC1->CR1|=(1<<5);       //Enable interrupt for EOC end of conversion
+	NVIC_EnableIRQ(ADC_IRQn); //calling interrupt handler from vector table
+	//ADC1->CR2&=~(1<<1);
+}
+
+void ADC_IRQHandler(void)
+{
+	if(ADC1->SR&(1<<1))   //checks for status register of ADC1 1st bit
+	{
+		var=ADC1->DR;     //assigns value of DR register to a variable
+		ADC1->SR&=~(1<<1); //clears the SR register first bit
+	}
+}
+void EXTI9_5_IRQHandler(void)
+{
+	if(EXTI->PR&(1<<7))   //checks for pending register bit no. 7
+	{
+		ADC1->CR2|=(1<<30);  //enable conversion by making conversion bit of cr-2 as 1
+		EXTI->PR|=(1<<7);  //clear the bit by making it to 1
+	}
+}

@@ -1,0 +1,39 @@
+#include <stdint.h>
+#include <stm32f405xx.h>
+#include <stdio.h>
+#include "lcd.h"  // Include your LCD header file
+
+void SPI1_master_config(void);
+void SPI1GPIO_init(void);
+void SPI_slave(void);
+
+uint32_t result = 0;
+char buffer[30];  // For displaying on LCD
+
+int main(void)
+{
+    SPI1GPIO_init();
+    SPI1_master_config();
+    SPI_slave();
+
+    lcd_gpio_init();  // Initialize LCD GPIO
+    lcd_init();       // Initialize LCD
+
+    while(1)
+    {
+        SPI1->DR = 0x11;                      // Send data
+        while (!(SPI1->SR & (1 << 1)));       // Wait for TXE bit
+        if (SPI2->SR & (1 << 0))              // If RXNE bit is set
+        {
+            result = SPI2->DR;
+
+            // Display on LCD
+            lcd(0x80, 0); // First line
+            lcd_string("SPI2 Received:");
+
+            sprintf(buffer, "0x%02X", result);
+            lcd(0xC0, 0); // Second line
+            lcd_string(buffer);
+        }
+    }
+}

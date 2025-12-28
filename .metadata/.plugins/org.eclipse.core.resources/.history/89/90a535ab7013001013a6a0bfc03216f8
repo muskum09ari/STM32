@@ -1,0 +1,123 @@
+#include <stdint.h>
+#include <stm32f405xx.h>
+#include <stdio.h>
+#include "lcd.h"  // Include your LCD header file
+
+void SPI1_master_config(void);
+void SPI1GPIO_init(void);
+void SPI_slave(void);
+
+uint32_t result = 0;
+char buffer[30];  // For displaying on LCD
+
+void SPI1GPIO_init(void)
+{
+	RCC->AHB1ENR |=(1<<0);// GPIOA enable
+
+	//MODER5,6,7
+	GPIOA->MODER |=((1<<15)|(1<<13)|(1<<11)); //sets bits
+	GPIOA->MODER &=~((1<<14)|(1<<12)|(1<<10));// clear bits
+
+	//sets bits 10 to 15 bits as high speed for PA5,6,7,
+	GPIOA->OSPEEDR |=((1<<15)|(1<<13)|(1<<11)); //sets bits
+	GPIOA->OSPEEDR &=~((1<<14)|(1<<12)|(1<<10));// clear bits
+	GPIOA->OTYPER &=~((1<<5)|(1<<6)|(1<<7));//set s0
+	//0101 AF5 PG285 and 273
+	GPIOA->AFR[0] |=((1<<20)|(1<<22)|(1<<24)|(1<<26)|(1<<28)|(1<<30));
+	GPIOA->AFR[0] &=~((1<<21)|(1<<23)|(1<<25)|(1<<27)|(1<<29)|(1<<31));
+
+	//spi-2
+		RCC->AHB1ENR|=(1<<1); //clock enable for spi-1 port-a
+	    GPIOB->MODER&=~(1<<26);
+	    GPIOB->MODER|=(1<<27);
+	    GPIOB->MODER&=~(1<<28);
+		GPIOB->MODER|=(1<<29);
+		GPIOB->MODER&=~(1<<30);
+		GPIOB->MODER|=(1<<31);
+		GPIOB->OTYPER&=~(1<<13);
+		GPIOB->OTYPER&=~(1<<14);
+		GPIOB->OTYPER&=~(1<<15);
+		GPIOB->OSPEEDR&=~(1<<26);
+		GPIOB->OSPEEDR|=(1<<27);
+		GPIOB->OSPEEDR&=~(1<<28);
+		GPIOB->OSPEEDR|=(1<<29);
+		GPIOB->OSPEEDR&=~(1<<30);
+		GPIOB->OSPEEDR|=(1<<31);
+
+		GPIOB->AFR[1]|=(1<<20);
+		GPIOB->AFR[1]&=~(1<<21);
+		GPIOB->AFR[1]|=(1<<22);
+		GPIOB->AFR[1]&=~(1<<23);
+		GPIOB->AFR[1]|=(1<<24);
+		GPIOB->AFR[1]&=~(1<<25);
+		GPIOB->AFR[1]|=(1<<26);
+		GPIOB->AFR[1]&=~(1<<27);
+		GPIOB->AFR[1]|=(1<<28);
+		GPIOB->AFR[1]&=~(1<<29);
+		GPIOB->AFR[1]|=(1<<30);
+		GPIOB->AFR[1]&=~(1<<31);
+}
+
+void SPI1_master_config(void)
+{
+	RCC->APB2ENR |=(1<<12); //SPI Enble PG 266
+	SPI1->CR1 |=(1<<2);
+	SPI1->CR1 |=((1<<0)|(1<<1));
+	//sets f/16
+	SPI1->CR1 |=(1<<3);
+	SPI1->CR1 |=(1<<4);
+	SPI1->CR1 &=~(1<<5);
+	SPI1->CR1 &=~(1<<7);
+
+
+	SPI1->CR1 |=(1<<8);
+	SPI1->CR1 |=(1<<9);
+	SPI1->CR1 &=~((1<<10)|(1<<11)|(1<<12)|(1<<13));
+	SPI1->CR1 &=~(1<<15);
+	SPI1->CR1 |=(1<<6);
+}
+
+void SPI_slave(void)
+{
+RCC->APB1ENR |=(1<<14);// enable clock
+SPI2->CR1 &=~(1<<2);
+SPI2->CR1 |=((1<<0)|(1<<1));
+SPI2->CR1 &=~(1<<7);//BIT as 0
+SPI2->CR1 &=~(1<<8);//BIT as 0
+SPI2->CR1 |=(1<<9);
+SPI2->CR1 &=~(1<<10);//BIT as 0
+SPI2->CR1 &=~(1<<11);//BIT as 0
+SPI2->CR1 &=~(1<<12);//BIT as 0
+SPI2->CR1 &=~(1<<13);//BIT as 0
+SPI2->CR1 &=~(1<<15);//BIT as 0
+
+SPI2->CR1 |=(1<<6);
+}
+int main(void)
+{
+    SPI1GPIO_init();
+    SPI1_master_config();
+    SPI_slave();
+
+    lcd_gpio_init();  // Initialize LCD GPIO
+    lcd_init();       // Initialize LCD
+
+    while(1)
+    {
+        SPI1->DR = 0x11;                      // Send data
+        while (!(SPI1->SR & (1 << 1)));       // Wait for TXE bit
+        if (SPI2->SR & (1 << 0))              // If RXNE bit is set
+        {
+            result = SPI2->DR;
+
+            // Display on LCD
+            lcd(0x80, 0); // First line
+            lcd_string("SPI2 Received:");
+
+            sprintf(buffer, "0x%02X", result);
+            lcd(0xC0, 0); // Second line
+            lcd_string(buffer);
+            for (volatile int i = 0; i < 100000; i++); // Simple delay
+        }
+    }
+}

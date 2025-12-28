@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;switch1_led1&apos; to &apos;all_switchled_toggle_ext_interrupt&apos;" description="Rename resource &apos;switch1_led1&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="/switch1_led1" name="all_switchled_toggle_ext_interrupt" stamp="1743070039015" updateReferences="true"/>
+</session>

@@ -1,0 +1,89 @@
+#include <stdint.h>
+#include <stm32f405xx.h>
+#include "lcd.h"
+
+//USART3 is mapped to DMA1, Stream 3, Channel 4
+void usart3_init(void);
+void dma1_stream3_init(uint8_t *data, uint32_t len);
+
+// Message to send
+uint8_t message[] = "HELLO DMA";
+
+int main(void)
+{
+    // LCD Initialization
+    lcd_gpio_init();
+    lcd_init();
+
+    // USART + DMA Init
+    usart3_init();
+    dma1_stream3_init(message, sizeof(message) - 1);
+
+    // Show message on LCD
+    lcd(0x80, 0);          // First line
+    lcd_string("USART3 DMA TX");
+
+    lcd(0xC0, 0);          // Second line
+    lcd_string((char *)message);  // Display the message being sent
+
+    while (1)
+    {
+        // Idle: DMA is transmitting in background
+    }
+}
+
+// USART3 Init
+void usart3_init()
+{
+    RCC->APB1ENR |= (1 << 18);  // Enable USART3 clock
+    RCC->AHB1ENR |= (1 << 2);   // Enable GPIOC clock
+
+    // PC10 = TX (AF7), PC11 = RX (optional)
+        GPIOC->MODER&=~(1<<20); //PC10 so 10*2=20
+    	GPIOC->MODER|=(1<<21);
+    	GPIOC->MODER&=~(1<<22);//PC11
+    	GPIOC->MODER|=(1<<23);
+
+    	//Alternate mode 10 AFR7 0111 for pc10
+    	GPIOC->AFR[1]|=(1<<8);
+    	GPIOC->AFR[1]|=(1<<9);
+    	GPIOC->AFR[1]|=(1<<10);
+    	GPIOC->AFR[1]&=~(1<<11);
+
+    	//alternate mode for PC11 so AF7
+    	GPIOC->AFR[1]|=(1<<12);
+    	GPIOC->AFR[1]|=(1<<13);
+    	GPIOC->AFR[1]|=(1<<14);
+    	GPIOC->AFR[1]&=~(1<<15);
+
+    USART3->BRR = 0x0683;       // Baudrate for 9600 @ 16 MHz
+    USART3->CR1 |= (1 << 3);    // TE: Transmit Enable
+    USART3->CR1 |= (1 << 13);   // UE: USART Enable
+    USART3->CR3 |= (1 << 7);    // DMAT: DMA for Transmit
+}
+
+// DMA1 Stream3 for USART3_TX
+void dma1_stream3_init(uint8_t *data, uint32_t len)
+{
+    RCC->AHB1ENR |= (1 << 21);  // Enable DMA1
+
+    DMA1_Stream3->CR &= ~1;     // Disable stream
+    while (DMA1_Stream3->CR & 1); // Wait until disabled
+
+    DMA1_Stream3->PAR = (uint32_t)&USART3->DR;
+    DMA1_Stream3->M0AR = (uint32_t)data;
+    DMA1_Stream3->NDTR = len;
+
+    // Channel 4 so 100 bit 27 to 25
+    DMA1_Stream3->CR &= ~(1 << 25);
+    DMA1_Stream3->CR &= ~(1 << 26);    l
+    DMA1_Stream3->CR &= (1 << 27);
+
+    DMA1_Stream3->CR |= (1 << 6);       // Memory to peripheral
+    DMA1_Stream3->CR |= (1 << 10);      // Memory increment
+//byte(8bit) so 11-14= 0
+    DMA1_Stream3->CR &= ~((1 << 11) |(1 << 12)| (1 << 13)|(1 << 14)); // Byte size for mem/periph
+
+    DMA1_Stream3->FCR = 0;              // Direct mode
+    DMA1_Stream3->CR |= 1;              // Enable stream
+}

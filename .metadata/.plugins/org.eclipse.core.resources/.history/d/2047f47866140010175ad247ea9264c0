@@ -1,0 +1,147 @@
+/**
+When switch 4 is pressed read ADC value from the POT, generate a duty cycle and using PWM show the PWM output change using
+a buzzer based alarm,
+ */
+
+#include <stdint.h>
+#include<stdio.h>
+#include <STM32f405xx.h>
+#include <lcd.h>
+
+void ADC_init();
+uint16_t ADC_Read();
+void PWM_init();
+void update_PWM(uint16_t);
+void buzzer_init();
+
+
+uint16_t result_ch11;
+char buf[16];
+float Vol_ch11;
+uint8_t dutyCycle;
+
+void ADC_init(){
+
+	// Enable ADC1 clock - Page 187
+		RCC->APB2ENR |= (1<<8);
+
+	//Turning MODER for ADC for PC1
+	GPIOC->MODER |= (1<<2);
+	GPIOC->MODER |=(1<<3);
+
+	// Ensure ADC is disabled before configuration
+		ADC1->CR2 &= ~(1<<0);
+
+		// Configure the sequence register for channel 11 - Page 423
+		ADC1->SQR3 = (11 << 0);
+
+		// PAGE 422 SQR1 REGULAR CHANNEL SEQUANCE LENGTH FOR channel1 SO BIT has to be 11
+			ADC1->SQR1 &=~(1<<20);
+			ADC1->SQR1 &=~(1<<21);
+			ADC1->SQR1 &=~(1<<22);
+			ADC1->SQR1 &=~(1<<23);
+
+		// Enable scan mode -
+		ADC1->CR1 |= (1<<8);
+
+		// Enable ADC -
+		ADC1->CR2 |= (1<<0);
+
+}
+
+uint16_t ADC_Read()
+{
+	// Start conversion
+	ADC1->CR2 |= (1<<30);
+
+	// Wait for conversion to complete using bit 1
+	while(!(ADC1->SR & (1<<1)));
+
+	// Read ADC result for channel 11 -
+	result_ch11 = ADC1->DR;
+	return result_ch11;
+}
+
+void PWM_init()
+{
+	// Enable GPIOC Clock for LED on PC6 (TIM3 CH1)
+	RCC->AHB1ENR |= (1<<2);
+
+	GPIOC->MODER |= (1<<13);
+	GPIOC->MODER &= ~(1<<12); // Alternate Function Mode for PC6
+
+		// Set AF2 (TIM3_CH1) for PC6
+		GPIOC->AFR[0] |= (2<<24);
+
+
+	// Configure TIM3 for PWM Mode
+	TIM3->PSC = 84 - 1; // Prescaler to get 1 MHz
+	TIM3->ARR = 1000 - 1; // Period for 1 kHz PWM
+
+	TIM3->CCMR1 &= ~(1 << 4); // (6,5,4)=110 PWM MODE 1 pg 636 oc1m
+	TIM3->CCMR1 |= (1 << 5);
+	TIM3->CCMR1 |= (1 << 6);
+
+	// low for 0 to 6 / alternate function pC6 bcz af1 0010 (27,26,25,24) PG 286
+			GPIOC->AFR[0] &= ~(1 << 24);
+			GPIOC->AFR[0] &= ~(1 << 26);
+			GPIOC->AFR[0] &= ~(1 << 27);
+			GPIOC->AFR[0] |= (1 << 25);
+
+	TIM3->CCER |= (1<<0); // Enable Channel 1
+	TIM3->CCR1 = 0; // Initial duty cycle 0%
+
+	// Enable Timer
+	TIM3->CR1 |= (1<<0);
+}
+
+
+
+void update_PWM(uint16_t adc_value)
+{
+	dutyCycle = (adc_value * 100) / 4095; // Scale 0-4095 to 0-100%
+	TIM3->CCR1 = (dutyCycle * TIM3->ARR) / 100; // Set PWM duty cycle
+}
+
+void buzzer_init()
+{RCC->AHB1ENR |= (1 << 2);
+GPIOC->MODER &= ~(1<< 18);  // This clears both bits moder 9 bcz pc9 so 18,19th bits
+GPIOC->MODER |= (1<< 19);
+
+	}
+
+void buzzer_beep() {
+    GPIOC->ODR ^= (1 << 9);           // Toggle PC9
+}
+int main(void){
+			lcd_gpio_init();
+				lcd_init();
+				ADC_init();
+				PWM_init();
+				buzzer_init();
+				while(1)
+				    {
+					result_ch11 = ADC_Read();
+					        update_PWM(result_ch11);
+
+					        Vol_ch11 = (float)(result_ch11 * 3.3) / 4095;
+
+					        lcd(0x80, 0);
+					        lcd_string("ADC: ");
+					        single_print(result_ch11);
+					        lcd_string(" V:");
+					        char buf[16];
+					        sprintf(buf, "%.2f", Vol_ch11);
+					        lcd_string(buf);
+
+					        lcd(0xC0, 0);
+					        lcd_string("Duty: ");
+					        sprintf(buf, "%d%%", dutyCycle);
+					        lcd_string(buf);
+
+					        buzzer_beep();
+
+					        for (volatile int i = 0; i < 100000; i++); // Delay
+					    }
+}
+

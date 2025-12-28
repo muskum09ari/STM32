@@ -1,0 +1,70 @@
+#include <stdint.h>
+#include <stm32f405xx.h>
+
+void DMA2_MemoryToPeripheral_Config(void);
+
+int main (void)
+{
+
+	lcd_gpio_init(); // Enable LCD GPIO
+    lcd_init();      // Initialize LCD
+
+
+    lcd(0x80, 0);  // Line 1
+    lcd_string("Before:");
+
+        for (int i = 0; i < size; i++)
+        {
+            lcd(0xC0, 0);  // Line 2
+            single_print(source[i]);
+            for (volatile int d = 0; d < 1000000; d++);  // Delay
+        }
+
+    DMA2_MemoryToMemory_Config();
+    dma2_transfer_start((uint32_t)source, (uint32_t)destination, size); //type casting
+
+        lcd(0x01, 0);  // Clear screen
+        lcd(0x80, 0);
+        lcd_string("After:");
+        for (int i = 0; i < size; i++)
+        {
+            lcd(0xC0, 0);
+            single_print(destination[i]);
+            for (volatile int d = 0; d < 1000000; d++);  // Delay
+        }
+
+        while (1);
+}
+
+void DMA2_MemoryToPeripheral_Config(void)
+{
+	RCC->AHB1ENR |= (1 << 22); // Enable DMA2 clock
+
+	    DMA2_Stream0->CR = 0;
+	    while (DMA2_Stream0->CR & (1 << 0));
+
+//HALF WORD 01 Memory data size
+DMA2_Stream0->CR |=(1<<13);
+DMA2_Stream0->CR &=~(1<<14);
+
+//HALF WORD 01 Peripheral data size
+DMA2_Stream0->CR |=(1<<11);
+DMA2_Stream0->CR &=~(1<<12);
+
+DMA2_Stream0->CR |=(1<<10);// Memory increment
+DMA2_Stream0->CR |=(1<<9);
+//Data transfer 10  Data transfer direction
+DMA2_Stream0->CR &=~(1<<6);
+DMA2_Stream0->CR |=(1<<7);
+
+DMA2_Stream0->CR |=(1<<4);// transfer complete
+DMA2_Stream0->CR |=(1<<2);//Transfer error interrupt enable
+
+//FIFO FULL FULL
+DMA2_Stream0->FCR |=(1<<1);
+DMA2_Stream0->FCR |=(1<<0);
+DMA2_Stream0->FCR|=(1<<2); //in fcr reg bit no. 2 make as 1
+
+NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+}

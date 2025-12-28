@@ -1,0 +1,95 @@
+#include <stdint.h>
+#include <stm32f405xx.h>
+#include "lcd.h"
+
+#define size  5
+
+volatile uint8_t transfer_complete=0;
+uint16_t source[size]={213,324,553,215,723};
+uint16_t destination[size]={0};
+
+void DMA2_MemoryToMemory_Config(void);
+void dma2_transfer_start(uint32_t src_buff, uint32_t dest_buff, uint32_t len);
+
+
+int main (void)
+{
+
+	lcd_gpio_init(); // Enable LCD GPIO
+    lcd_init();      // Initialize LCD
+
+
+    lcd(0x80, 0);  // Line 1
+    lcd_string("Before:");
+
+        for (int i = 0; i < size; i++)
+        {
+            lcd(0xC0, 0);  // Line 2
+            single_print(source[i]);
+            for (volatile int d = 0; d < 1000000; d++);  // Delay
+        }
+
+    DMA2_MemoryToMemory_Config();
+    dma2_transfer_start((uint32_t)source, (uint32_t)destination, size);
+
+        lcd(0x01, 0);  // Clear screen
+        lcd(0x80, 0);
+        lcd_string("After:");
+        for (int i = 0; i < size; i++)
+        {
+            lcd(0xC0, 0);
+            single_print(destination[i]);
+            for (volatile int d = 0; d < 1000000; d++);  // Delay
+        }
+
+        while (1);
+}
+
+void DMA2_MemoryToMemory_Config(void)
+{
+	RCC->AHB1ENR |= (1 << 22); // Enable DMA2 clock
+
+	    DMA2_Stream0->CR = 0;
+	    while (DMA2_Stream0->CR & (1 << 0));
+
+	    DMA2_Stream0->CR |= (1 << 13); // Memory-to-memory
+	    DMA2_Stream0->CR |= (1 << 11); // MSIZE = half-word (01)
+	    DMA2_Stream0->CR |= (1 << 9);  // PINC = 1
+	    DMA2_Stream0->CR |= (1 << 10); // MINC = 1
+	    DMA2_Stream0->CR |= (1 << 7);  // TC interrupt enable
+	    DMA2_Stream0->CR |= (1 << 4);  // DIR[1:0] = 01 (Mem to Mem)
+	    DMA2_Stream0->FCR |= (1 << 2); // Direct mode disable
+	    DMA2_Stream0->FCR |= (3 << 0); // FIFO threshold full
+
+	    NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+}
+
+void dma2_transfer_start(uint32_t src_buff, uint32_t dest_buff, uint32_t len)
+{
+	    transfer_complete = 0;
+
+	    DMA2_Stream0->PAR = src_buff;
+	    DMA2_Stream0->M0AR = dest_buff;
+	    DMA2_Stream0->NDTR = len;
+
+	    DMA2_Stream0->CR |= 1; // Enable stream
+
+	    while (!transfer_complete);  // Wait for transfer to complete
+
+}
+
+void DMA2_Stream0_IRQHandler(void)
+{if (DMA2->LISR & (1 << 5))  // Transfer complete interrupt flag
+{
+    DMA2->LIFCR |= (1 << 5); // Clear the flag
+    transfer_complete = 1;
+}
+
+if (DMA2->LISR & (1 << 3))  // Transfer error flag
+{
+    DMA2->LIFCR |= (1 << 3);
+    transfer_complete = 1;
+}
+}
+

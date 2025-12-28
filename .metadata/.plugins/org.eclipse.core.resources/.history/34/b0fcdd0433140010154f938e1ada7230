@@ -1,0 +1,5 @@
+/*Design a system where a button triggers ADC conversion via EXTI interrupt.
+ * The ADC value should determine the PWM duty cycle. Display the duty cycle and ADC value on LCD.
+ * Show the corresponding brightness change in LED using PWM.
+ * Further, once the PWM is updated, trigger a USART message saying "PWM updated" on LCD.  */
+
